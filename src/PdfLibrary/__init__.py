@@ -1,10 +1,16 @@
 import os
-from .wabr import  WAUtils, WABarcodeReader, WABarcode
+import uuid
+import numpy as np
+import glob
+import sys
 from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
 from pdfminer.converter import TextConverter
 from pdfminer.layout import LAParams
 from pdfminer.pdfpage import PDFPage
 from cStringIO import StringIO
+from pydmtx import DataMatrix
+from PIL import Image as Img
+from wand.image import Image
 
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -49,18 +55,35 @@ class PdfLibrary(object):
             message = "PDF '%s' should have contained text '%s' but did not" % (path, value)
             raise AssertionError(message)
 
-    def pdf_should_contain_barcode_with(self, path, btype, btext):
-        WAUtils.SetStdoutUTF8()
-        serverUrl = ""  #  Your server URL (default is wanr.inliteresearch.com)
-        auth = ""       #  Your Authorization code or  WABR_AUTH environment variable is used
-        reader = WABarcodeReader(serverUrl, auth)
-        barcode_founded = False
-        barcodes = reader.Read(path)
-        for n in range(0, len(barcodes)):
-            barcode = barcodes[n]
-            if barcode.Type == btype and barcode.Text.startswith(btext):
-                barcode_founded = True
+    def pdf_should_contain_datamatrix_with(self, path, btext):
+        path_list = path.split('/')
+        path_list.pop()
+        image_folder = '/'.join(path_list)
+        uuid_set = str(uuid.uuid4().fields[-1])[:5]
+        try:
+            with Image(filename=path, resolution=200) as img:
+                img.compression_quality = 80
+                img.save(filename="%s/temp%s.jpg" % (image_folder, uuid_set))
+        except Exception, err:
+            message = "PDF '%s' could not be processed" % (path)
+            raise AssertionError(message)
+
+        barcode_value = False
+        for file in os.listdir(image_folder):
+            image_path = os.path.join(image_folder, file)
+            if os.path.isfile(image_path) and image_path.endswith('.jpg'):
+                dm_read = DataMatrix()
+                img = Img.open(image_path)
+                content = dm_read.decode(img.size[0], img.size[1], buffer(img.tostring()))
+                if content.startswith(btext):
+                    barcode_value = True
                 break
-        if not barcode_founded:
-            message = "PDF '%s' should have contained barcode type '%s' and text '%s' but did not" % (path, btype, btext)
+
+        for file in os.listdir(image_folder):
+            image_path = os.path.join(image_folder, file)
+            if os.path.isfile(image_path) and image_path.endswith('.jpg'):
+                os.remove(image_path)
+
+        if not barcode_value:
+            message = "PDF '%s' should have contained datamatrix with value '%s' but did not" % (path, btext)
             raise AssertionError(message)
