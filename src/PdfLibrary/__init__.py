@@ -1,8 +1,5 @@
 import os
 import uuid
-import numpy as np
-import glob
-import sys
 from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
 from pdfminer.converter import TextConverter
 from pdfminer.layout import LAParams
