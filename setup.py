@@ -27,6 +27,6 @@ setup(
   zip_safe         = False,
   classifiers      = CLASSIFIERS.splitlines(),
   package_dir      = {'' : 'src'},
-  install_requires = ['robotframework', 'pdfminer'],
+  install_requires = ['robotframework', 'pdfminer', 'pydmtx', 'wand'],
   packages         = ['PdfLibrary'],
 )
