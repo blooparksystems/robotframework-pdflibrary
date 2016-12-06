@@ -72,6 +72,9 @@ class PdfLibrary(object):
             message = "PDF '%s' shouldn't have contained text '%s' but it has" % (path, value)
             raise AssertionError(message)
 
+    def pdf_remove_document(self, path):
+        os.remove(path)
+
     def pdf_should_contain_datamatrix_with(self, path, btext):
         path_list = path.split('/')
         path_list.pop()
