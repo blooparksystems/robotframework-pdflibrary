@@ -52,6 +52,26 @@ class PdfLibrary(object):
             message = "PDF '%s' should have contained text '%s' but did not" % (path, value)
             raise AssertionError(message)
 
+    def pdf_should_not_contain_value(self, path, value):
+        rsrcmgr = PDFResourceManager()
+        laparams = LAParams()
+        codec = 'utf-8'
+
+        retstr = StringIO()
+        device = TextConverter(rsrcmgr, retstr, codec=codec, laparams=laparams)
+        interpreter = PDFPageInterpreter(rsrcmgr, device)
+
+        fp = file(path, 'rb')
+        for page in PDFPage.get_pages(fp, set(), maxpages=0, password="", caching=True, check_extractable=True):
+            interpreter.process_page(page)
+        fp.close()
+        device.close()
+        content = retstr.getvalue()
+        retstr.close()
+        if value.encode('utf-8') in content:
+            message = "PDF '%s' shouldn't have contained text '%s' but it has" % (path, value)
+            raise AssertionError(message)
+
     def pdf_should_contain_datamatrix_with(self, path, btext):
         path_list = path.split('/')
         path_list.pop()
