@@ -20,57 +20,59 @@ class PdfLibrary(object):
     
     ROBOT_LIBRARY_VERSION = VERSION
     ROBOT_LIBRARY_SCOPE = 'GLOBAL'
-    
+
+    def _extract_pdf_content(path):
+        rsrcmgr = PDFResourceManager()
+        laparams = LAParams()
+        codec = 'utf-8'
+
+        retstr = StringIO()
+        device = TextConverter(
+            rsrcmgr, retstr,
+            codec=codec, laparams=laparams
+        )
+        interpreter = PDFPageInterpreter(rsrcmgr, device)
+
+        fp = file(path, 'rb')
+        for page in PDFPage.get_pages(
+            fp, set() maxpages=0, password="",
+            caching=True, check_extractable=True
+        ):
+            interpreter.process_page(page)
+        fp.close()
+        device.close()
+        content = retstr.getvalue()
+        retstr.close()
+
+        return content
+
     def create_profile(self, path):
         from selenium import webdriver
         fp = webdriver.FirefoxProfile()
         fp.set_preference("browser.download.folderList", 2)
         fp.set_preference("browser.download.manager.showWhenStarting", False)
         fp.set_preference("browser.download.dir", path)
-        fp.set_preference("browser.helperApps.neverAsk.saveToDisk", 'application/pdf')
+        fp.set_preference("browser.helperApps.neverAsk.saveToDisk",
+            'application/pdf')
         fp.set_preference("pdfjs.disabled", True)
         fp.update_preferences()
         return fp.path
 
     def pdf_should_contain_value(self, path, value):
-        rsrcmgr = PDFResourceManager()
-        laparams = LAParams()
-        codec = 'utf-8'
-
-        retstr = StringIO()
-        device = TextConverter(rsrcmgr, retstr, codec=codec, laparams=laparams)
-        interpreter = PDFPageInterpreter(rsrcmgr, device)
-
-        fp = file(path, 'rb')
-        for page in PDFPage.get_pages(fp, set(), maxpages=0, password="", caching=True, check_extractable=True):
-            interpreter.process_page(page)
-        fp.close()
-        device.close()
-        content = retstr.getvalue()
-        retstr.close()
+        content = self._extract_pdf_content(path)
         if not value.encode('utf-8') in content:
-            message = "PDF '%s' should have contained text '%s' but did not" % (path, value)
-            raise AssertionError(message)
+            raise AssertionError(
+                "PDF '%s' should have contained text '%s' but did not"
+                % (path, value)
+            )
 
     def pdf_should_not_contain_value(self, path, value):
-        rsrcmgr = PDFResourceManager()
-        laparams = LAParams()
-        codec = 'utf-8'
-
-        retstr = StringIO()
-        device = TextConverter(rsrcmgr, retstr, codec=codec, laparams=laparams)
-        interpreter = PDFPageInterpreter(rsrcmgr, device)
-
-        fp = file(path, 'rb')
-        for page in PDFPage.get_pages(fp, set(), maxpages=0, password="", caching=True, check_extractable=True):
-            interpreter.process_page(page)
-        fp.close()
-        device.close()
-        content = retstr.getvalue()
-        retstr.close()
+        content = self._extract_pdf_content(path)
         if value.encode('utf-8') in content:
-            message = "PDF '%s' shouldn't have contained text '%s' but it has" % (path, value)
-            raise AssertionError(message)
+            raise AssertionError(
+                "PDF '%s' shouldn't have contained text '%s' but it has"
+                % (path, value)
+            )
 
     def pdf_remove_document(self, path):
         os.remove(path)
@@ -85,8 +87,7 @@ class PdfLibrary(object):
                 img.compression_quality = 80
                 img.save(filename="%s/temp%s.jpg" % (image_folder, uuid_set))
         except Exception, err:
-            message = "PDF '%s' could not be processed" % (path)
-            raise AssertionError(message)
+            raise AssertionError("PDF '%s' could not be processed" % (path))
 
         barcode_value = False
         for file in os.listdir(image_folder):
@@ -94,7 +95,9 @@ class PdfLibrary(object):
             if os.path.isfile(image_path) and image_path.endswith('.jpg'):
                 dm_read = DataMatrix()
                 img = Img.open(image_path)
-                content = dm_read.decode(img.size[0], img.size[1], buffer(img.tostring()))
+                content = dm_read.decode(
+                    img.size[0], img.size[1], buffer(img.tostring())
+                )
                 if content.startswith(btext):
                     barcode_value = True
                 break
@@ -105,5 +108,7 @@ class PdfLibrary(object):
                 os.remove(image_path)
 
         if not barcode_value:
-            message = "PDF '%s' should have contained datamatrix with value '%s' but did not" % (path, btext)
-            raise AssertionError(message)
+            raise AssertionError(
+                """PDF '%s' should have contained datamatrix with 
+                value '%s' but did not""" % (path, btext)
+            )
