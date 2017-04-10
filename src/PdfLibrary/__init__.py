@@ -22,7 +22,7 @@ class PdfLibrary(object):
     ROBOT_LIBRARY_VERSION = VERSION
     ROBOT_LIBRARY_SCOPE = 'GLOBAL'
 
-    def _extract_pdf_content(path):
+    def _extract_pdf_content(self, path):
         rsrcmgr = PDFResourceManager()
         laparams = LAParams()
         codec = 'utf-8'
