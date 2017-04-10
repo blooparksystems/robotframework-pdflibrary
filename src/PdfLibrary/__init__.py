@@ -35,8 +35,9 @@ class PdfLibrary(object):
         interpreter = PDFPageInterpreter(rsrcmgr, device)
 
         path_decrypt = path.replace('.pdf', '_decrypt.pdf')
-        call('qpdf --password=%s --decrypt %s %s_decry'
-            % ('', path, path_decrypt), shell=True)
+        call('qpdf --password=%s --decrypt %s %s' % (
+            '', path, path_decrypt
+        ), shell=True)
 
         fp = file(path_decrypt, 'rb')
         for page in PDFPage.get_pages(
