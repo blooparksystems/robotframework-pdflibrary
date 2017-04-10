@@ -41,7 +41,7 @@ class PdfLibrary(object):
 
         fp = file(path_decrypt, 'rb')
         for page in PDFPage.get_pages(
-            fp, set() maxpages=0, password="",
+            fp, set(), maxpages=0, password="",
             caching=True, check_extractable=True
         ):
             interpreter.process_page(page)
