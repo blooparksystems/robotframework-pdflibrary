@@ -8,6 +8,7 @@ from cStringIO import StringIO
 from pydmtx import DataMatrix
 from PIL import Image as Img
 from wand.image import Image
+from subprocess import call
 
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -33,7 +34,11 @@ class PdfLibrary(object):
         )
         interpreter = PDFPageInterpreter(rsrcmgr, device)
 
-        fp = file(path, 'rb')
+        path_decrypt = path.replace('.pdf', '_decrypt.pdf')
+        call('qpdf --password=%s --decrypt %s %s_decry'
+            % ('', path, path_decrypt), shell=True)
+
+        fp = file(path_decrypt, 'rb')
         for page in PDFPage.get_pages(
             fp, set() maxpages=0, password="",
             caching=True, check_extractable=True
@@ -43,6 +48,8 @@ class PdfLibrary(object):
         device.close()
         content = retstr.getvalue()
         retstr.close()
+
+        os.remove(path_decrypt)
 
         return content
 
