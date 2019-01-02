@@ -1,51 +1,69 @@
+# -*- coding: utf-8 -*-
+##############################################################################
+#
+# Odoo, an open source suite of business apps
+# This module copyright (C) 2018 bloopark systems (<http://bloopark.de>).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+#
+##############################################################################
 import os
 import uuid
-from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
-from pdfminer.converter import TextConverter
-from pdfminer.layout import LAParams
-from pdfminer.pdfpage import PDFPage
-from cStringIO import StringIO
-from pydmtx import DataMatrix
-from PIL import Image as Img
-from wand.image import Image
+
+from io import StringIO
 from subprocess import call
 
+from pdfminer.converter import TextConverter
+from pdfminer.layout import LAParams
+from pdfminer.pdfinterp import PDFPageInterpreter, PDFResourceManager
+from pdfminer.pdfpage import PDFPage
 
-THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-execfile(os.path.join(THIS_DIR, 'version.py'))
+from wand.image import Image
+from wand.color import Color
 
-__version__ = VERSION
+from pylibdmtx import pylibdmtx
+from PIL import Image as Img
 
 
-class PdfLibrary(object):
-    
-    ROBOT_LIBRARY_VERSION = VERSION
-    ROBOT_LIBRARY_SCOPE = 'GLOBAL'
+class PdfDriver(object):
 
-    def _extract_pdf_content(self, path):
+    def __init__(self, path):
+        self.path = path
+
+    def extract_pdf_content(self):
         rsrcmgr = PDFResourceManager()
         laparams = LAParams()
         codec = 'utf-8'
 
         retstr = StringIO()
-        device = TextConverter(
-            rsrcmgr, retstr,
-            codec=codec, laparams=laparams
-        )
+        device = TextConverter(rsrcmgr, retstr, codec=codec, laparams=laparams)
         interpreter = PDFPageInterpreter(rsrcmgr, device)
 
-        path_decrypt = path.replace('.pdf', '_decrypt.pdf')
-        call('qpdf --password=%s --decrypt %s %s' % (
-            '', path, path_decrypt
+        path_decrypt = self.path.replace('.pdf', '_decrypt.pdf')
+        call('qpdf --password=%s --decrypt "%s" "%s"' % (
+            '', self.path, path_decrypt
         ), shell=True)
 
-        fp = file(path_decrypt, 'rb')
-        for page in PDFPage.get_pages(
-            fp, set(), maxpages=0, password="",
-            caching=True, check_extractable=True
-        ):
-            interpreter.process_page(page)
-        fp.close()
+        with open(path_decrypt, 'rb') as fp:
+            pages = PDFPage.get_pages(
+                fp, set(), maxpages=0, password="",
+                caching=True, check_extractable=True
+            )
+            for page in pages:
+                interpreter.process_page(page)
+            fp.close()
+
         device.close()
         content = retstr.getvalue()
         retstr.close()
@@ -54,69 +72,49 @@ class PdfLibrary(object):
 
         return content
 
-    def create_profile(self, path):
-        from selenium import webdriver
-        fp = webdriver.FirefoxProfile()
-        fp.set_preference("browser.download.folderList", 2)
-        fp.set_preference("browser.download.manager.showWhenStarting", False)
-        fp.set_preference("browser.download.dir", path)
-        fp.set_preference("browser.helperApps.neverAsk.saveToDisk",
-            'application/pdf')
-        fp.set_preference("pdfjs.disabled", True)
-        fp.update_preferences()
-        return fp.path
-
-    def pdf_should_contain_value(self, path, value):
-        content = self._extract_pdf_content(path)
-        if not value.encode('utf-8') in content:
-            raise AssertionError(
-                "PDF '%s' should have contained text '%s' but did not"
-                % (path, value)
-            )
-
-    def pdf_should_not_contain_value(self, path, value):
-        content = self._extract_pdf_content(path)
-        if value.encode('utf-8') in content:
-            raise AssertionError(
-                "PDF '%s' shouldn't have contained text '%s' but it has"
-                % (path, value)
-            )
-
-    def pdf_remove_document(self, path):
-        os.remove(path)
-
-    def pdf_should_contain_datamatrix_with(self, path, btext):
-        path_list = path.split('/')
-        path_list.pop()
-        image_folder = '/'.join(path_list)
+    def extract_pdf_datamatrix(self):
         uuid_set = str(uuid.uuid4().fields[-1])[:5]
-        try:
-            with Image(filename=path, resolution=200) as img:
-                img.compression_quality = 80
-                img.save(filename="%s/temp%s.jpg" % (image_folder, uuid_set))
-        except Exception, err:
-            raise AssertionError("PDF '%s' could not be processed" % (path))
+        image_folder = os.path.dirname(self.path)
+        image_file = os.path.join(image_folder, 'image%s.png' % uuid_set)
 
-        barcode_value = False
-        for file in os.listdir(image_folder):
-            image_path = os.path.join(image_folder, file)
-            if os.path.isfile(image_path) and image_path.endswith('.jpg'):
-                dm_read = DataMatrix()
-                img = Img.open(image_path)
-                content = dm_read.decode(
-                    img.size[0], img.size[1], buffer(img.tostring())
-                )
-                if content.startswith(btext):
-                    barcode_value = True
-                break
+        pages = Image(filename=self.path)
+        page = pages.sequence[0]  # Check first page
+        with Image(page) as img:
+            img.format = 'png'
+            img.background_color = Color('white')
+            img.alpha_channel = 'remove'
+            img.save(filename=image_file)
 
-        for file in os.listdir(image_folder):
-            image_path = os.path.join(image_folder, file)
-            if os.path.isfile(image_path) and image_path.endswith('.jpg'):
-                os.remove(image_path)
+        datamatrix = pylibdmtx.decode(Img.open(image_file))
 
-        if not barcode_value:
-            raise AssertionError(
-                """PDF '%s' should have contained datamatrix with 
-                value '%s' but did not""" % (path, btext)
-            )
+        os.remove(image_file)
+
+        return datamatrix and datamatrix[0].data.decode() or False
+
+
+def pdf_should_contain_value(path, value):
+    pdf = PdfDriver(path)
+    content = pdf.extract_pdf_content()
+    if value not in content:
+        raise AssertionError(
+            "PDF '%s' should have contained text '%s' but did not" % (
+                path, value))
+
+
+def pdf_should_not_contain_value(path, value):
+    pdf = PdfDriver(path)
+    content = pdf.extract_pdf_content()
+    if value in content:
+        raise AssertionError(
+            "PDF '%s' shouldn't have contained text '%s' but it has" % (
+                path, value))
+
+
+def pdf_should_contain_datamatrix_with(path, value):
+    pdf = PdfDriver(path)
+    content = pdf.extract_pdf_datamatrix()
+    if not (content and content.startswith(value)):
+        raise AssertionError(
+            """PDF '%s' should have contained datamatrix with 
+            value '%s' but did not.""" % (path, value)
+         )
